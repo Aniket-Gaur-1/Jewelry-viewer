@@ -1,54 +1,57 @@
 import * as THREE from "three";
 
 export function normalizeGeometry(geometry) {
+  if (!geometry) return; // Safety check
+  
   geometry.computeBoundingBox();
-
   const box = geometry.boundingBox;
+  
+  // If the box is null (empty mesh), stop processing
+  if (!box) return;
+
   const center = new THREE.Vector3();
   box.getCenter(center);
-
   geometry.translate(-center.x, -center.y, -center.z);
 
   const size = new THREE.Vector3();
   box.getSize(size);
   const maxDim = Math.max(size.x, size.y, size.z);
-
-  const scale = 2 / maxDim;
+  const scale = 2 / (maxDim || 1); // Avoid division by zero
   geometry.scale(scale, scale, scale);
-
   geometry.computeVertexNormals();
 }
 
 export function normalizeObject(object) {
-  const box = new THREE.Box3().setFromObject(object);
-  const center = new THREE.Vector3();
-  box.getCenter(center);
+  if (!object) return;
 
-  // 🔥 STEP 1: Fix pivot INSIDE meshes
   object.traverse((child) => {
-    if (child.isMesh) {
+    // Only process if it's a mesh AND has valid geometry
+    if (child.isMesh && child.geometry) {
       child.geometry.computeBoundingBox();
-
-      const geoCenter = new THREE.Vector3();
-      child.geometry.boundingBox.getCenter(geoCenter);
-
-      // ✅ move geometry to origin (REAL FIX)
-      child.geometry.translate(-geoCenter.x, -geoCenter.y, -geoCenter.z);
-
-      child.geometry.computeVertexNormals();
+      
+      // Ensure the bounding box exists before trying to center it
+      if (child.geometry.boundingBox) {
+        const geoCenter = new THREE.Vector3();
+        child.geometry.boundingBox.getCenter(geoCenter);
+        child.geometry.translate(-geoCenter.x, -geoCenter.y, -geoCenter.z);
+        child.geometry.computeVertexNormals();
+      }
     }
   });
 
-  // 🔥 STEP 2: Reset object transform
-  object.position.set(0, 0, 0);
-  object.rotation.set(0, 0, 0);
+  // Center the whole ring group
+  const box = new THREE.Box3().setFromObject(object);
+  if (box.isEmpty()) return; // Stop if the whole object is empty
 
-  // 🔥 STEP 3: Scale
+  const center = new THREE.Vector3();
+  box.getCenter(center);
+  object.position.x -= center.x;
+  object.position.y -= center.y;
+  object.position.z -= center.z;
+
   const size = new THREE.Vector3();
   box.getSize(size);
-
   const maxDim = Math.max(size.x, size.y, size.z);
-  const scale = 2 / maxDim;
-
+  const scale = 2 / (maxDim || 1);
   object.scale.set(scale, scale, scale);
 }
